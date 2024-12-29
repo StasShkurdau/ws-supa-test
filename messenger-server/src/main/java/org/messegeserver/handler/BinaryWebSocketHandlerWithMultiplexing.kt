@@ -5,8 +5,9 @@ import io.netty.channel.ChannelHandlerContext
 import io.netty.channel.SimpleChannelInboundHandler
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler
-import jdk.jshell.execution.Util
 import org.messegeserver.wsmextension.WsmExtensionFrameTypes
+import org.messegeserver.wsmextension.WsmExtensionFrameTypes.MULTIPLE_FRAME_MESSAGE
+import org.messegeserver.wsmextension.WsmExtensionFrameTypes.SINGLE_FRAME_MESSAGE
 import org.messegeserver.wsmextension.handler.MultipleFrameMessageHandler
 import org.messegeserver.wsmextension.handler.SingleFrameMessageHandler
 
@@ -24,8 +25,8 @@ class BinaryWebSocketHandlerWithMultiplexing(
 
     //TODO remove
     @OptIn(ExperimentalStdlibApi::class)
-    private val userHandlerCode: (frameMessage: ByteBuf) -> Unit = { frameMessage ->
-        println(frameMessage.array().toHexString())
+    private val userHandlerCode: (frameMessage: ByteArray) -> Unit = { frameMessage ->
+        println(frameMessage.toHexString())
     }
 
 
@@ -39,15 +40,18 @@ class BinaryWebSocketHandlerWithMultiplexing(
         val frameType = WsmExtensionFrameTypes.valueOf(frameMessage.readShort())
 
         when (frameType) {
-            WsmExtensionFrameTypes.SINGLE_FRAME_MESSAGE -> processSingleFrameMessage(chanelContext, messageId, frameMessage)
-            WsmExtensionFrameTypes.MULTIPLE_FRAME_MESSAGE -> processMultipleFrameMessage(messageId, frameMessage)
+            SINGLE_FRAME_MESSAGE -> processSingleFrameMessage(
+                chanelContext = chanelContext,
+                messageId = messageId,
+                frameMessage = frameMessage
+            )
+
+            MULTIPLE_FRAME_MESSAGE -> processMultipleFrameMessage(
+                chanelContext = chanelContext,
+                messageId = messageId,
+                frameMessage = frameMessage
+            )
         }
-
-        val frameNumber = frameMessage.readInt()
-
-        val totalFramesInMessage = frameMessage.readInt()
-
-        val frameData = frameMessage.array()
 
         //TODO implement read message
     }
@@ -56,13 +60,14 @@ class BinaryWebSocketHandlerWithMultiplexing(
         chanelContext: ChannelHandlerContext,
         messageId: Long,
         frameMessage: ByteBuf,
-    ) {
-        singleFrameMessageHandler.handle(chanelContext, messageId, frameMessage, userHandlerCode)
-    }
+    ) = singleFrameMessageHandler.handle(chanelContext, messageId, frameMessage, userHandlerCode)
 
-    private fun processMultipleFrameMessage(messageId: Long, frameMessage: ByteBuf?) {
-        TODO("Not yet implemented")
-    }
+
+    private fun processMultipleFrameMessage(
+        chanelContext: ChannelHandlerContext,
+        messageId: Long,
+        frameMessage: ByteBuf
+    ) = multipleFrameMessageHandler.handle(chanelContext, messageId, frameMessage, userHandlerCode)
 
     override fun userEventTriggered(ctx: ChannelHandlerContext?, evt: Any?) {
         //TODO remove deprecated HANDSHAKE_CO MPLETE

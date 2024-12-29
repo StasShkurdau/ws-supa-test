@@ -20,7 +20,7 @@ class SingleFrameMessageHandler {
         chanelContext: ChannelHandlerContext,
         messageId: Long,
         frameMessage: ByteBuf,
-        payloadHandler: (frameMessage: ByteBuf) -> Unit
+        payloadHandler: (frameMessage: ByteArray) -> Unit
     ) {
         val fullMessageId = getContextMessageId(chanelContext.channel().id(), messageId)
 
@@ -32,7 +32,7 @@ class SingleFrameMessageHandler {
         }
 
         try {
-            payloadHandler(frameMessage)
+            payloadHandler(frameMessage.array())
         } catch (e: Exception) {
             //Clean cache on handling error
             processedMessagesCache.remove(fullMessageId)
