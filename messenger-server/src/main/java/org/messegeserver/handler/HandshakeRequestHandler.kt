@@ -23,7 +23,10 @@ class HandshakeRequestHandler(
         val containsWsPath = httpRequest.containsWsPath()
 
         when {
-            (containsWsPath && httpRequest.containsMultiplexingExtension()) -> startWsWithMultiplexingExtension(chanelContext, httpRequest)
+            (containsWsPath && httpRequest.containsMultiplexingExtension()) -> startWsWithMultiplexingExtension(
+                chanelContext,
+                httpRequest
+            )
 
             (containsWsPath) -> startWsWithoutExtension(chanelContext, httpRequest)
 
@@ -49,7 +52,6 @@ class HandshakeRequestHandler(
         } else {
             false
         }
-    }
 
 
     private fun startWsWithoutExtension(chanelContext: ChannelHandlerContext, httpRequest: FullHttpRequest) {
