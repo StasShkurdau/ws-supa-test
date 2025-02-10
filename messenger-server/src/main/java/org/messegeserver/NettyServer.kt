@@ -1,15 +1,15 @@
 package org.messegeserver
 
 import io.netty.bootstrap.ServerBootstrap
-import io.netty.channel.ChannelInitializer
 import io.netty.channel.ChannelOption
 import io.netty.channel.nio.NioEventLoopGroup
-import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
-import io.netty.handler.codec.string.StringDecoder
-import io.netty.handler.codec.string.StringEncoder
+import org.messegeserver.config.ChatServerInitializer
 
-class NettyServer(private val port: Int) {
+class NettyServer(
+    private val chatServerInitializer: ChatServerInitializer,
+    private val port: Int
+) {
 
     fun start() {
         val bossGroup = NioEventLoopGroup()
@@ -19,11 +19,7 @@ class NettyServer(private val port: Int) {
             val bootstrap = ServerBootstrap()
             bootstrap.group(bossGroup, workerGroup)
                 .channel(NioServerSocketChannel::class.java)
-                .childHandler(object : ChannelInitializer<SocketChannel>() {
-                    override fun initChannel(ch: SocketChannel) {
-                        ch.pipeline().addLast(StringDecoder(), StringEncoder(), ServerHandler())
-                    }
-                })
+                .childHandler(chatServerInitializer)
                 .option(ChannelOption.SO_BACKLOG, 128)
                 .childOption(ChannelOption.SO_KEEPALIVE, true)
 

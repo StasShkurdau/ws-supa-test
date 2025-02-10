@@ -5,7 +5,7 @@ import org.kodein.di.instance
 
 //TODO move to properties
 object Application {
-    var WS_PATH: String = ""
+    var WS_PATH: String = "/api/v1/chat/ws"
     var WS_PORT: Int = 7777
 
     @JvmStatic

@@ -4,6 +4,7 @@ import org.kodein.di.DI
 import org.kodein.di.bind
 import org.kodein.di.instance
 import org.kodein.di.singleton
+import org.messegeserver.config.ChatServerInitializer
 import org.messegeserver.handler.BinaryWebSocketHandler
 import org.messegeserver.handler.BinaryWebSocketHandlerWithMultiplexing
 import org.messegeserver.handler.HandshakeRequestHandler
@@ -13,7 +14,8 @@ import org.messegeserver.wsmextension.handler.SingleFrameMessageHandler
 fun applicationContainer(wsPath: String, port: Int) = DI {
 
     //Netty server
-    bind<NettyServer>() with singleton { NettyServer(port) }
+    bind<NettyServer>() with singleton { NettyServer(instance(), port) }
+    bind<ChatServerInitializer>() with singleton { ChatServerInitializer(instance()) }
 
     // WS handler
     bind<BinaryWebSocketHandler>() with singleton { BinaryWebSocketHandler() }

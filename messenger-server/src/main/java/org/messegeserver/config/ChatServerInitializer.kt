@@ -10,12 +10,9 @@ import io.netty.handler.stream.ChunkedWriteHandler
 import org.messegeserver.handler.BinaryWebSocketHandler
 import org.messegeserver.handler.HandshakeRequestHandler
 
-class ChatServerInitializer: ChannelInitializer<Channel>() {
-
-    companion object {
-        private const val wsPath: String = "/api/v1/chat/ws"
-    }
-
+class ChatServerInitializer(
+    private val handshakeRequestHandler: HandshakeRequestHandler,
+): ChannelInitializer<Channel>() {
     override fun initChannel(chanel: Channel?) {
         val chanelPipeline: ChannelPipeline = requireNotNull(chanel).pipeline();
 
@@ -23,8 +20,6 @@ class ChatServerInitializer: ChannelInitializer<Channel>() {
             .addLast(HttpServerCodec())
             .addLast(ChunkedWriteHandler())
             .addLast(HttpObjectAggregator(64 * 1024))
-            .addLast(HandshakeRequestHandler(wsPath))
-            .addLast(WebSocketServerProtocolHandler(wsPath))
-            .addLast(BinaryWebSocketHandler())
+            .addLast(handshakeRequestHandler)
     }
 }
