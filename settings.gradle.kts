@@ -3,3 +3,4 @@ plugins {
 }
 rootProject.name = "messenger"
 include("messenger-client")
+include("messenger-server")

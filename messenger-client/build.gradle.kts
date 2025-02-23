@@ -10,6 +10,11 @@ repositories {
 }
 
 dependencies {
+    val nettyVersion: String by project
+    val kodeinVersion: String by project
+
+    implementation("io.netty:netty-all:$nettyVersion")
+    implementation("org.kodein.di:kodein-di:$kodeinVersion")
     testImplementation(kotlin("test"))
 }
 
