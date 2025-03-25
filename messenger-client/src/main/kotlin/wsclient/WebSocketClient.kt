@@ -9,16 +9,12 @@ import io.netty.channel.socket.nio.NioSocketChannel
 import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame
 import io.netty.handler.codec.http.websocketx.WebSocketFrame
 import org.example.wsclient.WebSocketChanelInitializer
-import org.example.wsclient.handler.WebSocketClientHandler
-import org.example.wsclient.handler.WebSocketHandshakeClientHandler
 import java.net.URI
 
 
 class WebSocketClient(
     uri: URI,
-    wsClientHandler: WebSocketClientHandler,
     webSocketChanelInitializer: WebSocketChanelInitializer,
-    webSocketHandshakeClientHandler: WebSocketHandshakeClientHandler
 ) {
     private val host = uri.host ?: "127.0.0.1"
     private val port = uri.port
