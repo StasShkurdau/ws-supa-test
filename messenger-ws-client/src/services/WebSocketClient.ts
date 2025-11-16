@@ -33,8 +33,14 @@ export class WebSocketClient {
    */
   constructor(config: WebSocketConfig | { url: string }, eventHandlers: WebSocketEventHandlers = {}) {
     if ('url' in config) {
-      // Direct URL mode: use as-is
-      this.config = {} as any;
+      // Direct URL mode: use as-is with defaults
+      this.config = {
+        pingInterval: 30000,
+        pongTimeout: 10000,  // Increased to 10 seconds to avoid race conditions
+        autoReconnect: true,
+        maxReconnectAttempts: 5,
+        reconnectDelay: 3000,
+      } as any;
       (this.config as any).url = config.url;
     } else {
       // Old config mode
@@ -243,7 +249,8 @@ export class WebSocketClient {
    * Handles WebSocket close events
    */
   private handleClose(event: CloseEvent): void {
-    console.log(`WebSocket connection closed: ${event.code} - ${event.reason}`);
+    console.log(`WebSocket connection closed: code=${event.code}, reason="${event.reason}", wasClean=${event.wasClean}`);
+    console.log(`Manual disconnect: ${this.isManualDisconnect}`);
     
     this.stopHealthCheck();
     this.ws = null;
@@ -286,6 +293,13 @@ export class WebSocketClient {
    */
   private sendPing(): void {
     if (!this.isConnected()) {
+      console.log('Cannot send ping: not connected');
+      return;
+    }
+
+    // Don't send ping if we're already waiting for a pong
+    if (this.pongTimeoutId !== null) {
+      console.log('Skipping ping: still waiting for previous pong');
       return;
     }
 
@@ -311,7 +325,8 @@ export class WebSocketClient {
    * Handles pong response received from server
    */
   private handlePongReceived(): void {
-    console.log('Pong received - connection is healthy');
+    const hadTimeout = this.pongTimeoutId !== null;
+    console.log(`Pong received - connection is healthy (cleared timeout: ${hadTimeout})`);
     
     this.lastPongReceived = Date.now();
 
