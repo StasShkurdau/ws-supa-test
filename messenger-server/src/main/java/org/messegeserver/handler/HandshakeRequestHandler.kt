@@ -3,13 +3,16 @@ package org.messegeserver.handler
 import io.netty.channel.ChannelHandlerContext
 import io.netty.channel.SimpleChannelInboundHandler
 import io.netty.handler.codec.http.*
+import io.netty.channel.ChannelHandler.Sharable
+import org.messegeserver.util.logger
 
-
+@Sharable
 class HandshakeRequestHandler(
     private val wsPath: String,
     private val webSocketHandler: BinaryWebSocketHandler,
     private val webSocketHandlerWithMultiplexing: BinaryWebSocketHandlerWithMultiplexing,
 ) : SimpleChannelInboundHandler<FullHttpRequest>() {
+    private val logger = logger()
 
     companion object {
         private const val WS_EXTENSION_HEADER = "Sec-WebSocket-Extensions"
@@ -21,6 +24,8 @@ class HandshakeRequestHandler(
         if (httpRequest == null) throw NullPointerException("httpRequest can't be null")
 
         val containsWsPath = httpRequest.containsWsPath()
+
+        logger.info("containsWsPath: $containsWsPath, uri(): ${httpRequest.uri()}")
 
         when {
             (containsWsPath && httpRequest.containsMultiplexingExtension()) -> startWsWithMultiplexingExtension(

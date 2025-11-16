@@ -4,7 +4,6 @@ import {
   ConnectionStatus,
   MessageType,
   Message,
-  WebSocketConfig,
 } from '../types';
 
 /**
@@ -22,25 +21,27 @@ export const useWebSocket = () => {
   /**
    * Connects to WebSocket server with provided configuration
    */
-  const connect = useCallback((config: WebSocketConfig) => {
+  const connect = useCallback((config: any) => {
     // Disconnect existing connection if any
     if (clientRef.current) {
       clientRef.current.disconnect();
     }
 
-    // Create new WebSocket client with event handlers
-    clientRef.current = new WebSocketClient(config, {
-      onStatusChange: (newStatus) => {
-        setStatus(newStatus);
-      },
-      onMessage: (message) => {
-        // Add message to the list
-        setMessages((prev) => [...prev, message]);
-      },
-      onError: (err) => {
-        setError(err);
-      },
-    });
+    // If config.url is present, use it directly
+    if (typeof config.url === 'string') {
+      clientRef.current = new WebSocketClient({ url: config.url }, {
+        onStatusChange: (newStatus) => setStatus(newStatus),
+        onMessage: (message) => setMessages((prev) => [...prev, message]),
+        onError: (err) => setError(err),
+      });
+    } else {
+      // fallback for old configs
+      clientRef.current = new WebSocketClient(config, {
+        onStatusChange: (newStatus) => setStatus(newStatus),
+        onMessage: (message) => setMessages((prev) => [...prev, message]),
+        onError: (err) => setError(err),
+      });
+    }
 
     // Initiate connection
     clientRef.current.connect();

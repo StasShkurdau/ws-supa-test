@@ -31,20 +31,25 @@ export class WebSocketClient {
    * @param config - WebSocket connection configuration
    * @param eventHandlers - Event handlers for connection lifecycle
    */
-  constructor(config: WebSocketConfig, eventHandlers: WebSocketEventHandlers = {}) {
-    // Set default configuration values
-    this.config = {
-      host: config.host,
-      port: config.port,
-      path: config.path || '/',
-      secure: config.secure || false,
-      pingInterval: config.pingInterval || 30000, // 30 seconds
-      pongTimeout: config.pongTimeout || 5000, // 5 seconds
-      autoReconnect: config.autoReconnect !== undefined ? config.autoReconnect : true,
-      maxReconnectAttempts: config.maxReconnectAttempts || 5,
-      reconnectDelay: config.reconnectDelay || 3000, // 3 seconds
-    };
-    
+  constructor(config: WebSocketConfig | { url: string }, eventHandlers: WebSocketEventHandlers = {}) {
+    if ('url' in config) {
+      // Direct URL mode: use as-is
+      this.config = {} as any;
+      (this.config as any).url = config.url;
+    } else {
+      // Old config mode
+      this.config = {
+        host: config.host,
+        port: config.port,
+        path: config.path || '/',
+        secure: config.secure || false,
+        pingInterval: config.pingInterval || 30000,
+        pongTimeout: config.pongTimeout || 5000,
+        autoReconnect: config.autoReconnect !== undefined ? config.autoReconnect : true,
+        maxReconnectAttempts: config.maxReconnectAttempts || 5,
+        reconnectDelay: config.reconnectDelay || 3000,
+      };
+    }
     this.eventHandlers = eventHandlers;
   }
 
@@ -61,10 +66,13 @@ export class WebSocketClient {
     this.updateStatus(ConnectionStatus.CONNECTING);
 
     try {
-      // Build WebSocket URL
-      const protocol = this.config.secure ? 'wss' : 'ws';
-      const url = `${protocol}://${this.config.host}:${this.config.port}${this.config.path}`;
-      
+      let url = '';
+      if ('url' in this.config && typeof (this.config as any).url === 'string') {
+        url = (this.config as any).url;
+      } else {
+        const protocol = this.config.secure ? 'wss' : 'ws';
+        url = `${protocol}://${this.config.host}:${this.config.port}${this.config.path}`;
+      }
       console.log(`Connecting to WebSocket server: ${url}`);
       this.ws = new WebSocket(url);
 

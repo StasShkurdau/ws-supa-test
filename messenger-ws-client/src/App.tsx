@@ -1,4 +1,3 @@
-import React from 'react';
 import { Activity } from 'lucide-react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { ConnectionForm } from './components/ConnectionForm';
@@ -24,18 +23,8 @@ function App() {
   /**
    * Handles connection request from ConnectionForm
    */
-  const handleConnect = (host: string, port: number) => {
-    connect({
-      host,
-      port,
-      path: '/',
-      secure: false,
-      pingInterval: 30000, // 30 seconds
-      pongTimeout: 5000, // 5 seconds
-      autoReconnect: true,
-      maxReconnectAttempts: 5,
-      reconnectDelay: 3000, // 3 seconds
-    });
+  const handleConnect = (url: string) => {
+    connect({ url });
   };
 
   /**

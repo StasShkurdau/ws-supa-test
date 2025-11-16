@@ -6,7 +6,7 @@ interface ConnectionFormProps {
   /** Current connection status */
   status: ConnectionStatus;
   /** Callback when connect button is clicked */
-  onConnect: (host: string, port: number) => void;
+  onConnect: (url: string) => void;
   /** Callback when disconnect button is clicked */
   onDisconnect: () => void;
 }
@@ -20,41 +20,11 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
   onConnect,
   onDisconnect,
 }) => {
-  const [url, setUrl] = useState('ws://localhost:8080');
+  const [url, setUrl] = useState('ws://localhost:7777/api/v1/chat/ws');
 
   const isConnecting = status === ConnectionStatus.CONNECTING;
   const isConnected = status === ConnectionStatus.CONNECTED;
   const canConnect = !isConnecting && !isConnected;
-
-  /**
-   * Parses WebSocket URL and extracts host and port
-   */
-  const parseWebSocketUrl = (wsUrl: string): { host: string; port: number } | null => {
-    try {
-      // Add ws:// prefix if not present
-      let urlToParse = wsUrl.trim();
-      if (!urlToParse.startsWith('ws://') && !urlToParse.startsWith('wss://')) {
-        urlToParse = 'ws://' + urlToParse;
-      }
-
-      const parsedUrl = new URL(urlToParse);
-      
-      // Extract host (hostname without port)
-      const host = parsedUrl.hostname;
-      
-      // Extract port (use default if not specified)
-      let port = parsedUrl.port ? parseInt(parsedUrl.port, 10) : (parsedUrl.protocol === 'wss:' ? 443 : 80);
-      
-      // Validate port
-      if (isNaN(port) || port < 1 || port > 65535) {
-        return null;
-      }
-
-      return { host, port };
-    } catch (error) {
-      return null;
-    }
-  };
 
   /**
    * Handles form submission
@@ -63,14 +33,11 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
     e.preventDefault();
     
     if (canConnect) {
-      const parsed = parseWebSocketUrl(url);
-      
-      if (!parsed) {
-        alert('Please enter a valid WebSocket URL (e.g., ws://localhost:8080 or localhost:8080)');
+      if (!url.trim()) {
+        alert('Please enter a valid WebSocket URL (e.g., ws://localhost:8080/path)');
         return;
       }
-
-      onConnect(parsed.host, parsed.port);
+      onConnect(url.trim());
     }
   };
 

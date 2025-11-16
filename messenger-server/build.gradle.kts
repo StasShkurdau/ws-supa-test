@@ -2,6 +2,10 @@ plugins {
     kotlin("jvm") version "2.1.10"
 }
 
+kotlin {
+    jvmToolchain(22)
+}
+
 group = "org.example"
 version = "1.0-SNAPSHOT"
 
