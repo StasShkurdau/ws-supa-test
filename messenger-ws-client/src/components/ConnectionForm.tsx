@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { Plug, PlugZap } from 'lucide-react';
+import { Plug, PlugZap, Info } from 'lucide-react';
 import { ConnectionStatus } from '../types';
 
 interface ConnectionFormProps {
   /** Current connection status */
   status: ConnectionStatus;
   /** Callback when connect button is clicked */
-  onConnect: (url: string) => void;
+  onConnect: (url: string, multiplexing: boolean) => void;
   /** Callback when disconnect button is clicked */
   onDisconnect: () => void;
 }
@@ -21,6 +21,8 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
   onDisconnect,
 }) => {
   const [url, setUrl] = useState('ws://localhost:7777/api/v1/chat/ws');
+  const [multiplexing, setMultiplexing] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
 
   const isConnecting = status === ConnectionStatus.CONNECTING;
   const isConnected = status === ConnectionStatus.CONNECTED;
@@ -37,7 +39,7 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
         alert('Please enter a valid WebSocket URL (e.g., ws://localhost:8080/path)');
         return;
       }
-      onConnect(url.trim());
+      onConnect(url.trim(), multiplexing);
     }
   };
 
@@ -71,6 +73,49 @@ export const ConnectionForm: React.FC<ConnectionFormProps> = ({
           <p className="mt-1 text-xs text-gray-500">
             Examples: ws://localhost:8080, wss://example.com:443, 192.168.1.100:7777
           </p>
+        </div>
+
+        {/* Multiplexing Extension */}
+        <div className="border-t border-gray-200 pt-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="multiplexing"
+                checked={multiplexing}
+                onChange={(e) => setMultiplexing(e.target.checked)}
+                disabled={!canConnect}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:cursor-not-allowed"
+              />
+              <label htmlFor="multiplexing" className="text-sm font-medium text-gray-700">
+                Enable Multiplexing Extension
+              </label>
+            </div>
+            <button
+              type="button"
+              onMouseEnter={() => setShowInfo(true)}
+              onMouseLeave={() => setShowInfo(false)}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <Info size={18} />
+            </button>
+          </div>
+          
+          {/* Info tooltip */}
+          {showInfo && (
+            <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-gray-700">
+              <p className="font-semibold mb-1">Multiplexing Extension</p>
+              <p className="mb-2">Enables advanced WebSocket protocol with:</p>
+              <ul className="list-disc list-inside space-y-1 text-xs">
+                <li>Message framing with unique IDs</li>
+                <li>Support for single and multi-frame messages</li>
+                <li>Advanced message assembly and ordering</li>
+              </ul>
+              <p className="mt-2 text-xs italic">
+                Technical: Sends <code className="bg-white px-1 py-0.5 rounded">Sec-WebSocket-Protocol: multiplexing</code> header during handshake
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Connect/Disconnect buttons */}

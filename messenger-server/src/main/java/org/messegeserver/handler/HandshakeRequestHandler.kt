@@ -19,8 +19,8 @@ class HandshakeRequestHandler(
     private val logger = logger()
 
     companion object {
-        private const val WS_EXTENSION_HEADER = "Sec-WebSocket-Extensions"
-        private const val WS_MULTIPLEXING_EXTENSION = "Sus-Ws-multiplexing-Extension"
+        private const val WS_PROTOCOL_HEADER = "Sec-WebSocket-Protocol"
+        private const val WS_MULTIPLEXING_PROTOCOL = "multiplexing"
         
         // PING/PONG configuration (best practices for WebSocket)
         private const val READER_IDLE_TIME_SECONDS = 60L  // Close if no data received for 60s
@@ -38,7 +38,7 @@ class HandshakeRequestHandler(
         logger.info("containsWsPath: $containsWsPath, uri(): ${httpRequest.uri()}")
 
         when {
-            (containsWsPath && httpRequest.containsMultiplexingExtension()) -> startWsWithMultiplexingExtension(
+            (containsWsPath && httpRequest.hasMultiplexingEnabled()) -> startWsWithMultiplexingExtension(
                 chanelContext,
                 httpRequest
             )
@@ -59,14 +59,22 @@ class HandshakeRequestHandler(
 
     private fun FullHttpRequest.containsWsPath(): Boolean = uri().endsWith(wsPath)
 
-    private fun FullHttpRequest.containsMultiplexingExtension(): Boolean =
-        if (headers().contains(WS_EXTENSION_HEADER)) {
-            val extensions = headers().getAll(WS_EXTENSION_HEADER)
-
-            extensions.contains(WS_MULTIPLEXING_EXTENSION)
-        } else {
-            false
+    /**
+     * Checks if multiplexing is enabled via Sec-WebSocket-Protocol header
+     * The client sends: Sec-WebSocket-Protocol: multiplexing
+     */
+    private fun FullHttpRequest.hasMultiplexingEnabled(): Boolean {
+        if (headers().contains(WS_PROTOCOL_HEADER)) {
+            val protocols = headers().getAll(WS_PROTOCOL_HEADER)
+            if (protocols.contains(WS_MULTIPLEXING_PROTOCOL)) {
+                logger.debug("Multiplexing enabled via Sec-WebSocket-Protocol header")
+                return true
+            }
         }
+        
+        logger.debug("Multiplexing not enabled")
+        return false
+    }
 
 
     private fun startWsWithoutExtension(chanelContext: ChannelHandlerContext, httpRequest: FullHttpRequest) {
@@ -113,9 +121,10 @@ class HandshakeRequestHandler(
         )
         chanelContext.pipeline().addLast("idleStateHandler", idleStateHandler)
         
-        // Configure WebSocketServerProtocolHandler with proper settings
+        // Configure WebSocketServerProtocolHandler with multiplexing subprotocol support
         val wsConfig = WebSocketServerProtocolConfig.newBuilder()
             .websocketPath(wsPath)
+            .subprotocols(WS_MULTIPLEXING_PROTOCOL)  // Accept "multiplexing" subprotocol
             .checkStartsWith(false)  // Exact path match
             .handshakeTimeoutMillis(HANDSHAKE_TIMEOUT_MILLIS)
             .dropPongFrames(false)  // Let PONG frames reach handlers (for logging/debugging)
@@ -127,7 +136,7 @@ class HandshakeRequestHandler(
         chanelContext.pipeline().addLast("wsProtocolHandler", wsProtocolHandler)
         chanelContext.pipeline().addLast("binaryWebSocketHandlerWithMultiplexing", webSocketHandlerWithMultiplexing)
         
-        logger.debug("WebSocket pipeline configured: IdleStateHandler -> WebSocketServerProtocolHandler -> BinaryWebSocketHandlerWithMultiplexing")
+        logger.debug("WebSocket pipeline configured with multiplexing subprotocol: IdleStateHandler -> WebSocketServerProtocolHandler -> BinaryWebSocketHandlerWithMultiplexing")
         
         chanelContext.fireChannelRead(httpRequest.retain()) // To next handler
     }

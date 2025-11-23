@@ -23,8 +23,8 @@ function App() {
   /**
    * Handles connection request from ConnectionForm
    */
-  const handleConnect = (url: string) => {
-    connect({ url });
+  const handleConnect = (url: string, multiplexing: boolean) => {
+    connect({ url, multiplexing });
   };
 
   /**

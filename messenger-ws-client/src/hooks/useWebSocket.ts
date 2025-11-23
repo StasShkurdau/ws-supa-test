@@ -27,9 +27,45 @@ export const useWebSocket = () => {
       clientRef.current.disconnect();
     }
 
-    // If config.url is present, use it directly
+    // If config.url is present, parse it and add multiplexing if needed
     if (typeof config.url === 'string') {
-      clientRef.current = new WebSocketClient({ url: config.url }, {
+      // Parse URL to extract components
+      let url = config.url;
+      const multiplexing = config.multiplexing || false;
+      
+      // Remove protocol if present to parse
+      let protocol = 'ws';
+      let hostPath = url;
+      
+      if (url.startsWith('wss://')) {
+        protocol = 'wss';
+        hostPath = url.substring(6);
+      } else if (url.startsWith('ws://')) {
+        protocol = 'ws';
+        hostPath = url.substring(5);
+      }
+      
+      // Split host:port and path
+      const firstSlash = hostPath.indexOf('/');
+      let hostPort = hostPath;
+      let path = '/';
+      
+      if (firstSlash !== -1) {
+        hostPort = hostPath.substring(0, firstSlash);
+        path = hostPath.substring(firstSlash);
+      }
+      
+      // Split host and port
+      const [host, portStr] = hostPort.split(':');
+      const port = portStr ? parseInt(portStr, 10) : (protocol === 'wss' ? 443 : 80);
+      
+      clientRef.current = new WebSocketClient({
+        host,
+        port,
+        path,
+        secure: protocol === 'wss',
+        multiplexing,
+      }, {
         onStatusChange: (newStatus) => setStatus(newStatus),
         onMessage: (message) => setMessages((prev) => [...prev, message]),
         onError: (err) => setError(err),

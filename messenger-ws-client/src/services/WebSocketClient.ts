@@ -40,6 +40,7 @@ export class WebSocketClient {
         autoReconnect: true,
         maxReconnectAttempts: 5,
         reconnectDelay: 3000,
+        multiplexing: false,
       } as any;
       (this.config as any).url = config.url;
     } else {
@@ -49,6 +50,7 @@ export class WebSocketClient {
         port: config.port,
         path: config.path || '/',
         secure: config.secure || false,
+        multiplexing: config.multiplexing || false,
         pingInterval: config.pingInterval || 30000,
         pongTimeout: config.pongTimeout || 5000,
         autoReconnect: config.autoReconnect !== undefined ? config.autoReconnect : true,
@@ -79,8 +81,17 @@ export class WebSocketClient {
         const protocol = this.config.secure ? 'wss' : 'ws';
         url = `${protocol}://${this.config.host}:${this.config.port}${this.config.path}`;
       }
+      
       console.log(`Connecting to WebSocket server: ${url}`);
-      this.ws = new WebSocket(url);
+      
+      // Use subprotocol parameter to request multiplexing protocol
+      // This will send Sec-WebSocket-Protocol: multiplexing header
+      if (this.config.multiplexing) {
+        console.log('Requesting multiplexing subprotocol');
+        this.ws = new WebSocket(url, 'multiplexing');
+      } else {
+        this.ws = new WebSocket(url);
+      }
 
       // Set up event listeners
       this.ws.onopen = this.handleOpen.bind(this);

@@ -65,6 +65,8 @@ export interface WebSocketConfig {
   path?: string;
   /** Use secure WebSocket (wss://) instead of ws:// */
   secure?: boolean;
+  /** Enable multiplexing extension for advanced message handling */
+  multiplexing?: boolean;
   /** Interval for ping health checks in milliseconds (default: 30000) */
   pingInterval?: number;
   /** Timeout for pong response in milliseconds (default: 5000) */
