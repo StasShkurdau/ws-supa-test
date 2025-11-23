@@ -5,8 +5,8 @@ import org.kodein.di.bind
 import org.kodein.di.instance
 import org.kodein.di.singleton
 import org.messegeserver.config.ChatServerInitializer
-import org.messegeserver.handler.BinaryWebSocketHandler
-import org.messegeserver.handler.BinaryWebSocketHandlerWithMultiplexing
+import org.messegeserver.handler.BaseWebSocketHandler
+import org.messegeserver.handler.MultiplexingWebSocketHandlerWithMultiplexing
 import org.messegeserver.handler.HandshakeRequestHandler
 import org.messegeserver.wsmextension.handler.MultipleFrameMessageHandler
 import org.messegeserver.wsmextension.handler.SingleFrameMessageHandler
@@ -18,9 +18,9 @@ fun applicationContainer(wsPath: String, port: Int) = DI {
     bind<ChatServerInitializer>() with singleton { ChatServerInitializer(instance()) }
 
     // WS handler
-    bind<BinaryWebSocketHandler>() with singleton { BinaryWebSocketHandler() }
-    bind<BinaryWebSocketHandlerWithMultiplexing>() with singleton {
-        BinaryWebSocketHandlerWithMultiplexing(
+    bind<BaseWebSocketHandler>() with singleton { BaseWebSocketHandler() }
+    bind<MultiplexingWebSocketHandlerWithMultiplexing>() with singleton {
+        MultiplexingWebSocketHandlerWithMultiplexing(
             instance(),
             instance()
         )

@@ -13,8 +13,8 @@ import java.util.concurrent.TimeUnit
 @Sharable
 class HandshakeRequestHandler(
     private val wsPath: String,
-    private val webSocketHandler: BinaryWebSocketHandler,
-    private val webSocketHandlerWithMultiplexing: BinaryWebSocketHandlerWithMultiplexing,
+    private val webSocketHandler: BaseWebSocketHandler,
+    private val webSocketHandlerWithMultiplexing: MultiplexingWebSocketHandlerWithMultiplexing,
 ) : SimpleChannelInboundHandler<FullHttpRequest>() {
     private val logger = logger()
 

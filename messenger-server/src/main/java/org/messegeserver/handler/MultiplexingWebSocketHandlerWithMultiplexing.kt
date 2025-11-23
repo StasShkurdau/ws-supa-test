@@ -1,23 +1,42 @@
 package org.messegeserver.handler
 
+import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
-import io.netty.channel.ChannelHandler.Sharable
 import io.netty.channel.ChannelHandlerContext
 import io.netty.channel.SimpleChannelInboundHandler
 import io.netty.handler.codec.http.websocketx.*
 import io.netty.handler.timeout.IdleState
 import io.netty.handler.timeout.IdleStateEvent
 import org.messegeserver.util.logger
+import org.messegeserver.wsmextension.WsmExtensionFrameTypes
+import org.messegeserver.wsmextension.WsmExtensionFrameTypes.MULTIPLE_FRAME_MESSAGE
+import org.messegeserver.wsmextension.WsmExtensionFrameTypes.SINGLE_FRAME_MESSAGE
+import org.messegeserver.wsmextension.handler.MultipleFrameMessageHandler
+import org.messegeserver.wsmextension.handler.SingleFrameMessageHandler
 
-@Sharable
-class BinaryWebSocketHandler : SimpleChannelInboundHandler<WebSocketFrame>() {
+/**
+ * Protocol extension headers:
+ * from 1 to 8 bytes - messageId
+ * from 9 to 10 bytes - frame type
+ * from 9 to 12 - frame number
+ * from 13 to 16 - total number of frames
+ */
+class MultiplexingWebSocketHandlerWithMultiplexing(
+    private val singleFrameMessageHandler: SingleFrameMessageHandler,
+    private val multipleFrameMessageHandler: MultipleFrameMessageHandler,
+) : SimpleChannelInboundHandler<WebSocketFrame>() {
     private val logger = logger()
 
-    override fun channelRead0(chanelContext: ChannelHandlerContext?, webSocketFrame: WebSocketFrame?) {
-        if (chanelContext == null || webSocketFrame == null) {
-            logger.warn("Received null context or frame")
-            return
-        }
+    //TODO remove
+    @OptIn(ExperimentalStdlibApi::class)
+    private val userHandlerCode: (frameMessage: ByteArray) -> Unit = { frameMessage ->
+        println(frameMessage.toHexString())
+    }
+
+
+    override fun channelRead0(ch: ChannelHandlerContext?, webSocketFrame: WebSocketFrame?) {
+        val chanelContext = requireNotNull(ch)
+        requireNotNull(webSocketFrame)
 
         when (webSocketFrame) {
             is TextWebSocketFrame -> {
@@ -27,11 +46,9 @@ class BinaryWebSocketHandler : SimpleChannelInboundHandler<WebSocketFrame>() {
                 handleBinaryFrame(chanelContext, webSocketFrame)
             }
             is PingWebSocketFrame -> {
-                // WebSocketServerProtocolHandler should handle this, but log if it reaches here
                 logger.debug("Received PING frame from channel {}", chanelContext.channel().id().asShortText())
             }
             is PongWebSocketFrame -> {
-                // WebSocketServerProtocolHandler should handle this, but log if it reaches here
                 logger.debug("Received PONG frame from channel {}", chanelContext.channel().id().asShortText())
             }
             else -> {
@@ -64,16 +81,43 @@ class BinaryWebSocketHandler : SimpleChannelInboundHandler<WebSocketFrame>() {
     }
     
     /**
-     * Handles binary WebSocket frames (business logic)
+     * Handles binary WebSocket frames (multiplexing protocol)
      */
-    private fun handleBinaryFrame(ctx: ChannelHandlerContext, frame: BinaryWebSocketFrame) {
-        val dataLength = frame.content().readableBytes()
-        logger.debug("Received binary WebSocket frame: {} bytes from channel {}", 
-                     dataLength, ctx.channel().id().asShortText())
-        
+    private fun handleBinaryFrame(ctx: ChannelHandlerContext, webSocketFrame: BinaryWebSocketFrame) {
+        val frameMessage = webSocketFrame.content()
+
+        val messageId = frameMessage.readLong()
+        val frameType = WsmExtensionFrameTypes.valueOf(frameMessage.readShort())
+
+        when (frameType) {
+            SINGLE_FRAME_MESSAGE -> processSingleFrameMessage(
+                chanelContext = ctx,
+                messageId = messageId,
+                frameMessage = frameMessage
+            )
+
+            MULTIPLE_FRAME_MESSAGE -> processMultipleFrameMessage(
+                chanelContext = ctx,
+                messageId = messageId,
+                frameMessage = frameMessage
+            )
+        }
+
         //TODO implement read message
-        logger.trace("Binary frame content processing not yet implemented")
     }
+
+    private fun processSingleFrameMessage(
+        chanelContext: ChannelHandlerContext,
+        messageId: Long,
+        frameMessage: ByteBuf,
+    ) = singleFrameMessageHandler.handle(chanelContext, messageId, frameMessage, userHandlerCode)
+
+
+    private fun processMultipleFrameMessage(
+        chanelContext: ChannelHandlerContext,
+        messageId: Long,
+        frameMessage: ByteBuf
+    ) = multipleFrameMessageHandler.handle(chanelContext, messageId, frameMessage, userHandlerCode)
 
     override fun userEventTriggered(ctx: ChannelHandlerContext?, evt: Any?) {
         if (ctx == null) return
@@ -81,12 +125,10 @@ class BinaryWebSocketHandler : SimpleChannelInboundHandler<WebSocketFrame>() {
         when (evt) {
             //TODO remove deprecated HANDSHAKE_COMPLETE
             WebSocketServerProtocolHandler.ServerHandshakeStateEvent.HANDSHAKE_COMPLETE -> {
-                logger.info("WebSocket handshake completed for channel {}", ctx.channel().id().asShortText())
-                logger.debug("Removing HandshakeRequestHandler from pipeline")
-                
+                logger.info("WebSocket handshake completed (with multiplexing) for channel {}", 
+                           ctx.channel().id().asShortText())
                 ctx.pipeline().remove(HandshakeRequestHandler::class.java)
-                
-                logger.debug("Client {} successfully connected via WebSocket", 
+                logger.debug("Client {} successfully connected via WebSocket with multiplexing extension", 
                             ctx.channel().remoteAddress())
             }
             
@@ -110,7 +152,6 @@ class BinaryWebSocketHandler : SimpleChannelInboundHandler<WebSocketFrame>() {
                            evt.state())
                 
                 // Send PING frame to check if connection is alive
-                // WebSocketServerProtocolHandler will automatically handle the PONG response
                 val pingFrame = PingWebSocketFrame(Unpooled.wrappedBuffer("heartbeat".toByteArray()))
                 ctx.writeAndFlush(pingFrame).addListener { future ->
                     if (!future.isSuccess) {
@@ -133,32 +174,6 @@ class BinaryWebSocketHandler : SimpleChannelInboundHandler<WebSocketFrame>() {
                            ctx.channel().id().asShortText())
                 ctx.close()
             }
-        }
-    }
-
-    override fun channelActive(ctx: ChannelHandlerContext?) {
-        super.channelActive(ctx)
-        if (ctx != null) {
-            logger.info("Channel active: {} from {}", 
-                       ctx.channel().id().asShortText(), 
-                       ctx.channel().remoteAddress())
-        }
-    }
-
-    override fun channelInactive(ctx: ChannelHandlerContext?) {
-        super.channelInactive(ctx)
-        if (ctx != null) {
-            logger.info("Channel inactive: {} from {}", 
-                       ctx.channel().id().asShortText(), 
-                       ctx.channel().remoteAddress())
-        }
-    }
-
-    override fun exceptionCaught(ctx: ChannelHandlerContext?, cause: Throwable?) {
-        if (ctx != null && cause != null) {
-            logger.error("Exception in WebSocket handler for channel {}", 
-                        ctx.channel().id().asShortText(), cause)
-            ctx.close()
         }
     }
 }
