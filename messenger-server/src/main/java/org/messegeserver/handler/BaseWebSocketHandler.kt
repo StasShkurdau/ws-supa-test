@@ -7,11 +7,20 @@ import io.netty.channel.SimpleChannelInboundHandler
 import io.netty.handler.codec.http.websocketx.*
 import io.netty.handler.timeout.IdleState
 import io.netty.handler.timeout.IdleStateEvent
+import io.netty.util.AttributeKey
 import org.messegeserver.util.logger
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 
 @Sharable
 class BaseWebSocketHandler : SimpleChannelInboundHandler<WebSocketFrame>() {
     private val logger = logger()
+
+    companion object {
+        private const val PONG_TIMEOUT_MILLIS = 10_000L
+        private val PING_TIMEOUT_FUTURE_KEY: AttributeKey<ScheduledFuture<*>> =
+            AttributeKey.valueOf("pingTimeoutFuture")
+    }
 
     override fun channelRead0(chanelContext: ChannelHandlerContext?, webSocketFrame: WebSocketFrame?) {
         if (chanelContext == null || webSocketFrame == null) {
@@ -25,6 +34,18 @@ class BaseWebSocketHandler : SimpleChannelInboundHandler<WebSocketFrame>() {
             }
             is BinaryWebSocketFrame -> {
                 handleBinaryFrame(chanelContext, webSocketFrame)
+            }
+            is PingWebSocketFrame -> {
+                logger.debug("Received PING control frame from {}", chanelContext.channel().id().asShortText())
+                // Echo back as PONG per RFC 6455
+                chanelContext.writeAndFlush(PongWebSocketFrame(webSocketFrame.content().retain()))
+            }
+            is PongWebSocketFrame -> {
+                logger.debug("Received PONG control frame from {}", chanelContext.channel().id().asShortText())
+                // Cancel pending close if any
+                val attr = chanelContext.channel().attr(PING_TIMEOUT_FUTURE_KEY)
+                val future = attr.getAndSet(null)
+                future?.cancel(false)
             }
             else -> {
                 logger.warn("Received unsupported WebSocket frame type: {}", webSocketFrame.javaClass.simpleName)
@@ -105,7 +126,6 @@ class BaseWebSocketHandler : SimpleChannelInboundHandler<WebSocketFrame>() {
                            evt.state())
                 
                 // Send PING frame to check if connection is alive
-                // WebSocketServerProtocolHandler will automatically handle the PONG response
                 val pingFrame = PingWebSocketFrame(Unpooled.wrappedBuffer("heartbeat".toByteArray()))
                 ctx.writeAndFlush(pingFrame).addListener { future ->
                     if (!future.isSuccess) {
@@ -115,6 +135,17 @@ class BaseWebSocketHandler : SimpleChannelInboundHandler<WebSocketFrame>() {
                         ctx.close()
                     } else {
                         logger.debug("PING frame sent to channel {}", ctx.channel().id().asShortText())
+                        // Also send application-level ping for browser visibility
+                        ctx.writeAndFlush(TextWebSocketFrame("ping"))
+                        // Schedule close if PONG not received in time
+                        val attr = ctx.channel().attr(PING_TIMEOUT_FUTURE_KEY)
+                        attr.getAndSet(null)?.cancel(false)
+                        val scheduled = ctx.executor().schedule({
+                            logger.warn("PONG not received within {} ms for channel {}, closing", 
+                                       PONG_TIMEOUT_MILLIS, ctx.channel().id().asShortText())
+                            ctx.close()
+                        }, PONG_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)
+                        attr.set(scheduled)
                     }
                 }
             }

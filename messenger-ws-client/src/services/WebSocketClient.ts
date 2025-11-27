@@ -20,11 +20,14 @@ export class WebSocketClient {
   private pingIntervalId: number | null = null;
   private pongTimeoutId: number | null = null;
   private lastPongReceived: number = 0;
+  private lastServerPing: number = 0;
   
   // Reconnection state
   private reconnectAttempts: number = 0;
   private reconnectTimeoutId: number | null = null;
   private isManualDisconnect: boolean = false;
+  private savedAutoReconnect: boolean = true;
+  private suppressConnectUntil: number = 0;
 
   /**
    * Creates a new WebSocket client instance
@@ -58,7 +61,21 @@ export class WebSocketClient {
         reconnectDelay: config.reconnectDelay || 3000,
       };
     }
+
     this.eventHandlers = eventHandlers;
+    // Save original autoReconnect preference
+    this.savedAutoReconnect = (this.config as any).autoReconnect ?? true;
+  }
+
+  /**
+   * Establishes WebSocket connection explicitly initiated by the user.
+   * Clears manual disconnect guard and then calls connect().
+   */
+  public connectUserInitiated(): void {
+    this.isManualDisconnect = false;
+    // Restore original autoReconnect on explicit user connect
+    (this.config as any).autoReconnect = this.savedAutoReconnect;
+    this.connect();
   }
 
   /**
@@ -69,8 +86,16 @@ export class WebSocketClient {
       console.warn('WebSocket is already connected');
       return;
     }
-
-    this.isManualDisconnect = false;
+    // Suppress any internal connect if manual disconnect was requested
+    if (this.isManualDisconnect) {
+      console.log('Connect suppressed: manual disconnect active');
+      return;
+    }
+    // Temporal guard to avoid races immediately after disconnect
+    if (Date.now() < this.suppressConnectUntil) {
+      console.log('Connect suppressed: temporal guard active');
+      return;
+    }
     this.updateStatus(ConnectionStatus.CONNECTING);
 
     try {
@@ -114,12 +139,24 @@ export class WebSocketClient {
     this.isManualDisconnect = true;
     this.stopHealthCheck();
     this.clearReconnectTimeout();
+    // Hard-disable auto reconnect until user explicitly connects again
+    (this.config as any).autoReconnect = false;
+    // Prevent any racing connect calls for a short window
+    this.suppressConnectUntil = Date.now() + 2000;
 
     if (this.ws) {
       this.updateStatus(ConnectionStatus.DISCONNECTING);
       
       try {
-        this.ws.close(code, reason);
+        // Detach listeners to avoid side-effects during manual close
+        this.ws.onopen = null as any;
+        this.ws.onmessage = null as any;
+        this.ws.onerror = null as any;
+        this.ws.onclose = null as any;
+
+        if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+          this.ws.close(code, reason);
+        }
       } catch (error) {
         console.error('Error closing WebSocket:', error);
       }
@@ -196,6 +233,9 @@ export class WebSocketClient {
     this.updateStatus(ConnectionStatus.CONNECTED);
     this.reconnectAttempts = 0;
     this.lastPongReceived = Date.now();
+    this.lastServerPing = Date.now();
+    // Connection is now user-acknowledged; clear manual flag for future reconnects
+    this.isManualDisconnect = false;
     
     // Start health check mechanism
     this.startHealthCheck();
@@ -211,6 +251,18 @@ export class WebSocketClient {
       : MessageType.TEXT;
 
     // Check if this is a pong response (application-level)
+    if (messageType === MessageType.TEXT && event.data === 'ping') {
+      // Respond to server application-level ping for visibility
+      try {
+        this.ws?.send('pong');
+        this.lastServerPing = Date.now();
+        console.log('Server ping received -> pong sent');
+      } catch (e) {
+        console.warn('Failed to send pong in response to server ping:', e);
+      }
+      return;
+    }
+
     if (messageType === MessageType.TEXT && event.data === 'pong') {
       this.handlePongReceived();
       return;
@@ -280,7 +332,18 @@ export class WebSocketClient {
 
     // Send ping at regular intervals
     this.pingIntervalId = window.setInterval(() => {
-      this.sendPing();
+      if (!this.isConnected() || this.isManualDisconnect) {
+        return;
+      }
+
+      // If server hasn't sent us an application-level ping recently,
+      // proactively verify connection using app-level ping/pong
+      const sinceServerPing = Date.now() - this.lastServerPing;
+      const shouldProbe = sinceServerPing > this.config.pingInterval;
+
+      if (shouldProbe) {
+        this.sendPing();
+      }
     }, this.config.pingInterval);
   }
 
@@ -369,7 +432,12 @@ export class WebSocketClient {
       `Attempting to reconnect (${this.reconnectAttempts}/${this.config.maxReconnectAttempts})...`
     );
 
+    this.clearReconnectTimeout();
     this.reconnectTimeoutId = window.setTimeout(() => {
+      if (this.isManualDisconnect) {
+        console.log('Reconnect suppressed due to manual disconnect');
+        return;
+      }
       this.connect();
     }, this.config.reconnectDelay);
   }

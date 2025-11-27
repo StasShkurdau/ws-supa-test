@@ -71,16 +71,23 @@ export const useWebSocket = () => {
         onError: (err) => setError(err),
       });
     } else {
-      // fallback for old configs
-      clientRef.current = new WebSocketClient(config, {
-        onStatusChange: (newStatus) => setStatus(newStatus),
-        onMessage: (message) => setMessages((prev) => [...prev, message]),
-        onError: (err) => setError(err),
-      });
+      if (typeof config.url === 'string') {
+        clientRef.current = new WebSocketClient({ url: config.url }, {
+          onStatusChange: (newStatus) => setStatus(newStatus),
+          onMessage: (message) => setMessages((prev) => [...prev, message]),
+          onError: (err) => setError(err),
+        });
+      } else {
+        clientRef.current = new WebSocketClient(config, {
+          onStatusChange: (newStatus) => setStatus(newStatus),
+          onMessage: (message) => setMessages((prev) => [...prev, message]),
+          onError: (err) => setError(err),
+        });
+      }
     }
 
-    // Initiate connection
-    clientRef.current.connect();
+    // Initiate connection (user-initiated)
+    clientRef.current.connectUserInitiated();
   }, []);
 
   /**
@@ -89,6 +96,7 @@ export const useWebSocket = () => {
   const disconnect = useCallback(() => {
     if (clientRef.current) {
       clientRef.current.disconnect();
+      clientRef.current = null;
     }
   }, []);
 

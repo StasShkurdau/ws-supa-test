@@ -2,17 +2,21 @@ package org.messegeserver.handler
 
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
+import io.netty.channel.ChannelHandler.Sharable
 import io.netty.channel.ChannelHandlerContext
 import io.netty.channel.SimpleChannelInboundHandler
 import io.netty.handler.codec.http.websocketx.*
 import io.netty.handler.timeout.IdleState
 import io.netty.handler.timeout.IdleStateEvent
+import io.netty.util.AttributeKey
 import org.messegeserver.util.logger
 import org.messegeserver.wsmextension.WsmExtensionFrameTypes
 import org.messegeserver.wsmextension.WsmExtensionFrameTypes.MULTIPLE_FRAME_MESSAGE
 import org.messegeserver.wsmextension.WsmExtensionFrameTypes.SINGLE_FRAME_MESSAGE
 import org.messegeserver.wsmextension.handler.MultipleFrameMessageHandler
 import org.messegeserver.wsmextension.handler.SingleFrameMessageHandler
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 
 /**
  * Protocol extension headers:
@@ -21,11 +25,18 @@ import org.messegeserver.wsmextension.handler.SingleFrameMessageHandler
  * from 9 to 12 - frame number
  * from 13 to 16 - total number of frames
  */
+@Sharable
 class MultiplexingWebSocketHandlerWithMultiplexing(
     private val singleFrameMessageHandler: SingleFrameMessageHandler,
     private val multipleFrameMessageHandler: MultipleFrameMessageHandler,
 ) : SimpleChannelInboundHandler<WebSocketFrame>() {
     private val logger = logger()
+
+    companion object {
+        private const val PONG_TIMEOUT_MILLIS = 10_000L
+        private val PING_TIMEOUT_FUTURE_KEY: AttributeKey<ScheduledFuture<*>> =
+            AttributeKey.valueOf("muxPingTimeoutFuture")
+    }
 
     //TODO remove
     @OptIn(ExperimentalStdlibApi::class)
@@ -47,9 +58,13 @@ class MultiplexingWebSocketHandlerWithMultiplexing(
             }
             is PingWebSocketFrame -> {
                 logger.debug("Received PING frame from channel {}", chanelContext.channel().id().asShortText())
+                chanelContext.writeAndFlush(PongWebSocketFrame(webSocketFrame.content().retain()))
             }
             is PongWebSocketFrame -> {
                 logger.debug("Received PONG frame from channel {}", chanelContext.channel().id().asShortText())
+                val attr = chanelContext.channel().attr(PING_TIMEOUT_FUTURE_KEY)
+                val future = attr.getAndSet(null)
+                future?.cancel(false)
             }
             else -> {
                 logger.warn("Received unsupported WebSocket frame type: {}", webSocketFrame.javaClass.simpleName)
@@ -161,6 +176,15 @@ class MultiplexingWebSocketHandlerWithMultiplexing(
                         ctx.close()
                     } else {
                         logger.debug("PING frame sent to channel {}", ctx.channel().id().asShortText())
+                        ctx.writeAndFlush(TextWebSocketFrame("ping"))
+                        val attr = ctx.channel().attr(PING_TIMEOUT_FUTURE_KEY)
+                        attr.getAndSet(null)?.cancel(false)
+                        val scheduled = ctx.executor().schedule({
+                            logger.warn("PONG not received within {} ms for channel {}, closing", 
+                                       PONG_TIMEOUT_MILLIS, ctx.channel().id().asShortText())
+                            ctx.close()
+                        }, PONG_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)
+                        attr.set(scheduled)
                     }
                 }
             }
