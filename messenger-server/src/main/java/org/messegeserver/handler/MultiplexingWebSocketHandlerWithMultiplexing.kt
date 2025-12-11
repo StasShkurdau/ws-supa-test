@@ -1,5 +1,7 @@
 package org.messegeserver.handler
 
+import com.google.gson.Gson
+import com.google.gson.JsonParser
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import io.netty.channel.ChannelHandler.Sharable
@@ -15,6 +17,7 @@ import org.messegeserver.wsmextension.WsmExtensionFrameTypes.MULTIPLE_FRAME_MESS
 import org.messegeserver.wsmextension.WsmExtensionFrameTypes.SINGLE_FRAME_MESSAGE
 import org.messegeserver.wsmextension.handler.MultipleFrameMessageHandler
 import org.messegeserver.wsmextension.handler.SingleFrameMessageHandler
+import org.messegeserver.model.MultiplexingTextEnvelope
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
@@ -30,7 +33,8 @@ class MultiplexingWebSocketHandlerWithMultiplexing(
     private val singleFrameMessageHandler: SingleFrameMessageHandler,
     private val multipleFrameMessageHandler: MultipleFrameMessageHandler,
 ) : SimpleChannelInboundHandler<WebSocketFrame>() {
-    private val logger = logger()
+    private val logger = logger(MultiplexingWebSocketHandlerWithMultiplexing::class.java)
+    private val gson = Gson()
 
     companion object {
         private const val PONG_TIMEOUT_MILLIS = 10_000L
@@ -89,8 +93,28 @@ class MultiplexingWebSocketHandlerWithMultiplexing(
                 logger.debug("Received application-level PONG")
             }
             else -> {
-                logger.debug("Received text message: {}", text)
-                // TODO: Handle other text messages
+                try {
+                    val envelope = gson.fromJson(text, MultiplexingTextEnvelope::class.java)
+                    val type = envelope.type ?: "text"
+                    if (type != "text") {
+                        logger.warn("Unsupported multiplexing text message type: {}", type)
+                        return
+                    }
+
+                    val payload = envelope.payload
+                    if (payload == null) {
+                        logger.warn("Missing 'payload' in multiplexing text message")
+                        return
+                    }
+
+                    val payloadBytes = when (payload) {
+                        is String -> payload.toByteArray(Charsets.UTF_8)
+                        else -> gson.toJson(payload).toByteArray(Charsets.UTF_8)
+                    }
+                    userHandlerCode(payloadBytes)
+                } catch (e: Exception) {
+                    logger.error("Failed to parse multiplexing text frame: {}", text, e)
+                }
             }
         }
     }

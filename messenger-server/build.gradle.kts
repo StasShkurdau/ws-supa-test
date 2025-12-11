@@ -32,6 +32,7 @@ dependencies {
     implementation("org.apache.logging.log4j:log4j-api:$log4jVersion")
     implementation("org.apache.logging.log4j:log4j-core:$log4jVersion")
     implementation("org.apache.logging.log4j:log4j-slf4j2-impl:$log4jVersion")
+    implementation("com.google.code.gson:gson:2.10.1")
     
     // Testing
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
